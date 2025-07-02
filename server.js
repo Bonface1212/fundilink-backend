@@ -27,13 +27,14 @@ app.post('/api/fundis', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
 app.get('/api/fundis', async (req, res) => {
   try {
-    const fundis = await Fundi.find();
+    const fundis = await Fundi.find(); // <- this line might be failing
+    console.log("✅ Fundis from DB:", fundis); // Add this log
     res.json(fundis);
   } catch (err) {
+    console.error("❌ Failed to fetch fundis:", err.message); // Show real issue
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
+
