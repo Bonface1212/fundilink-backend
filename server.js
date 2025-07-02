@@ -11,9 +11,8 @@ app.use(cors());
 app.use(express.json());
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
-
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => console.log("❌ MongoDB error:", err));
 
 // POST: Register Fundi
 app.post('/api/fundis', async (req, res) => {
@@ -22,19 +21,24 @@ app.post('/api/fundis', async (req, res) => {
     await fundi.save();
     res.status(201).json({ message: "Fundi registered!" });
   } catch (error) {
-    console.error(error);
+    console.error("❌ Registration error:", error.message);
     res.status(500).json({ error: "Registration failed" });
   }
 });
 
+// GET: All Fundis
 app.get('/api/fundis', async (req, res) => {
   try {
-    const fundis = await Fundi.find(); // <- this line might be failing
-    console.log("✅ Fundis from DB:", fundis); // Add this log
+    const fundis = await Fundi.find();
+    console.log("✅ Fundis from DB:", fundis);
     res.json(fundis);
   } catch (err) {
-    console.error("❌ Failed to fetch fundis:", err.message); // Show real issue
+    console.error("❌ Failed to fetch fundis:", err.message);
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
 
+// ✅ START SERVER (this was missing)
+app.listen(PORT, () => {
+  console.log(`✅ Server running on port ${PORT}`);
+});
