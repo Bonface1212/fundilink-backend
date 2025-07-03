@@ -106,7 +106,7 @@ mongoose.connect(process.env.MONGO_URI)
   })
   .catch(err => console.log("❌ MongoDB error:", err));
 // M-Pesa STK Push Integration
-const { lipaNaMpesa } = require('./mpesa');
+const { lipaNaMpesa } = require('./routes/mpesa');
 const mpesaRoutes = require('./routes/mpesa');
 app.use('/api/mpesa', mpesaRoutes);
 
