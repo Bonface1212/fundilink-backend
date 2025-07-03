@@ -7,14 +7,17 @@ const multer = require('multer');
 const path = require('path');
 const Fundi = require('./models/Fundi');
 const User = require('./models/User');
+const { lipaNaMpesa } = require('./routes/mpesa');
 const mpesaRoutes = require('./routes/mpesa');
-app.use('/api/mpesa', mpesaRoutes);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Make uploads accessible
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use('/uploads', express.static(path.join(__dirname, "uploads")));
+
 // Multer storage config for image uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
@@ -33,11 +36,6 @@ const upload = multer({
     }
   }
 });
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static('uploads')); // Serve images publicly
 
 // Register User
 app.post("/register", async (req, res) => {
@@ -87,7 +85,6 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
-
 // Get All Fundis
 app.get('/api/fundis', async (req, res) => {
   try {
@@ -98,6 +95,9 @@ app.get('/api/fundis', async (req, res) => {
   }
 });
 
+// M-Pesa routes (handles /stk and /callback)
+app.use('/api/mpesa', mpesaRoutes);
+
 // Connect to MongoDB and start server
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
@@ -107,46 +107,3 @@ mongoose.connect(process.env.MONGO_URI)
     });
   })
   .catch(err => console.log("❌ MongoDB error:", err));
-// M-Pesa STK Push Integration
-
-const { lipaNaMpesa } = require('./routes/mpesa');
-const mpesaRoutes = require('./routes/mpesa');
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static('uploads')); // Serve images publicly
-
-// Import and use M-Pesa routes (only ONCE)
-app.use('/api/mpesa', mpesaRoutes);
-
-// M-Pesa STK Push Payment Endpoint
-app.post('/api/mpesa/pay', async (req, res) => {
-  const { phone, amount } = req.body;
-  try {
-    const result = await lipaNaMpesa(phone, amount);
-    res.json(result);
-  } catch (error) {
-    console.error('M-Pesa STK error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Payment initiation failed' });
-  }
-});
-
-// M-Pesa Callback Handler
-app.post("/api/mpesa/callback", (req, res) => {
-  console.log("📥 M-Pesa Callback Received:", req.body);
-
-  // You can extract and store useful data from req.body.Body.stkCallback here
-  const callbackData = req.body.Body?.stkCallback;
-
-  // Example log
-  if (callbackData?.ResultCode === 0) {
-    console.log("✅ Payment Successful:", callbackData.CallbackMetadata);
-  } else {
-    console.log("❌ Payment Failed:", callbackData.ResultDesc);
-  }
-
-  res.status(200).json({ message: "Callback received successfully" });
-});
-
-app.use(express.json({ type: 'application/json' }));
