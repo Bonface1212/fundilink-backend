@@ -1,86 +1,67 @@
-// routes/mpesa.js
 const express = require('express');
 const axios = require('axios');
+const moment = require('moment');
 const router = express.Router();
-require('dotenv').config();
 
 const {
   MPESA_SHORTCODE,
   MPESA_PASSKEY,
   MPESA_CONSUMER_KEY,
-  MPESA_CONSUMER_SECRET,
-  BASE_URL,
+  MPESA_CONSUMER_SECRET
 } = process.env;
 
-const getAccessToken = async () => {
-  const auth =
-    Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString('base64');
-
+// Step 1: Generate access token
+const generateToken = async () => {
+  const auth = Buffer.from(`${MPESA_CONSUMER_KEY}:${MPESA_CONSUMER_SECRET}`).toString('base64');
   const response = await axios.get(
     'https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials',
     {
-      headers: {
-        Authorization: `Basic ${auth}`,
-      },
+      headers: { Authorization: `Basic ${auth}` },
     }
   );
-
   return response.data.access_token;
 };
 
-router.post('/stk-push', async (req, res) => {
+// Step 2: STK Push
+router.post('/stk', async (req, res) => {
   const { phone, amount } = req.body;
 
-  if (!phone || !amount) {
-    return res.status(400).json({ error: 'Phone and amount are required' });
-  }
-
   try {
-    const accessToken = await getAccessToken();
+    const accessToken = await generateToken();
+    const timestamp = moment().format('YYYYMMDDHHmmss');
+    const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString('base64');
 
-    const timestamp = new Date()
-      .toISOString()
-      .replace(/[^0-9]/g, '')
-      .slice(0, -3);
-
-    const password = Buffer.from(
-      `${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`
-    ).toString('base64');
-
-    const stkPushData = {
+    const stkPayload = {
       BusinessShortCode: MPESA_SHORTCODE,
       Password: password,
       Timestamp: timestamp,
       TransactionType: 'CustomerPayBillOnline',
       Amount: amount,
-      PartyA: phone.startsWith('254') ? phone : phone.replace(/^0/, '254'),
+      PartyA: phone,
       PartyB: MPESA_SHORTCODE,
-      PhoneNumber: phone.startsWith('254') ? phone : phone.replace(/^0/, '254'),
-      CallBackURL: `${BASE_URL}/api/mpesa/callback`,
+      PhoneNumber: phone,
+      CallBackURL: 'https://my-callback.com/mpesa', // You can replace with your actual callback URL
       AccountReference: 'FundiLink',
-      TransactionDesc: 'FundiLink payment',
+      TransactionDesc: 'FundiLink Client Payment'
     };
 
     const response = await axios.post(
       'https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest',
-      stkPushData,
+      stkPayload,
       {
         headers: {
           Authorization: `Bearer ${accessToken}`,
-        },
+          'Content-Type': 'application/json'
+        }
       }
     );
 
-    res.json(response.data);
-  } catch (error) {
-    console.error('❌ STK Push Error:', error.response?.data || error.message);
-    res.status(500).json({ error: 'STK Push failed' });
-  }
-});
+    res.json({ success: true, data: response.data });
 
-router.post('/callback', (req, res) => {
-  console.log('📥 M-Pesa Callback:', JSON.stringify(req.body, null, 2));
-  res.status(200).json({ message: 'Callback received successfully' });
+  } catch (error) {
+    console.error('❌ M-Pesa STK Error:', error?.response?.data || error.message);
+    res.status(500).json({ error: 'STK Push failed', details: error.message });
+  }
 });
 
 module.exports = router;
