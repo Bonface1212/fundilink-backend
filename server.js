@@ -147,7 +147,7 @@ app.post("/api/mpesa/callback", (req, res) => {
   res.status(200).json({ message: "Callback received successfully" });
 });
 
-// Import M-Pesa routes
+// Import and use M-Pesa routes (only ONCE)
 const mpesaRoutes = require('./routes/mpesa');
 app.use('/api/mpesa', mpesaRoutes);
 
