@@ -11,22 +11,31 @@ const User = require('./models/User');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Make uploads accessible
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Multer storage config for image uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) =>
+    cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, ""))
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 1 * 1024 * 1024 }, // Max 1MB
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG and PNG images are allowed"), false);
+    }
+  }
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static('uploads')); // Serve images publicly
-
-// Multer storage config for image uploads
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads'); // folder must exist
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = `${Date.now()}-${file.originalname}`;
-    cb(null, uniqueName);
-  }
-});
-const upload = multer({ storage });
 
 // Register User
 app.post("/register", async (req, res) => {
@@ -58,25 +67,24 @@ app.post("/login", async (req, res) => {
 });
 
 // Register Fundi (with or without image)
-app.post('/api/fundis', upload.single('profilePicture'), async (req, res) => {
+app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
-    // If using form-data with image
-    if (req.file) {
-      const { name, phone, skill, location, price, description } = req.body;
-      const profilePicture = `/uploads/${req.file.filename}`;
-      const fundi = new Fundi({ name, phone, skill, location, price, description, profilePicture });
-      await fundi.save();
-      return res.status(201).json({ message: 'Fundi registered successfully' });
+    const { name, phone, skill, location, price, description } = req.body;
+
+    if (!name || !phone || !skill || !location || !price) {
+      return res.status(400).json({ error: "Please fill in all required fields." });
     }
-    // If using JSON body (no image)
-    const fundi = new Fundi(req.body);
+
+    const photo = req.file ? `/uploads/${req.file.filename}` : null;
+    const fundi = new Fundi({ name, phone, skill, location, price, description, photo });
     await fundi.save();
-    res.status(201).json({ message: "Fundi registered!" });
+    res.status(201).json({ message: "Fundi registered successfully!" });
   } catch (error) {
-    console.error("❌ Error in fundi registration:", error.message);
+    console.error("❌ Fundi registration error:", error.message);
     res.status(500).json({ error: 'Fundi registration failed' });
   }
 });
+
 
 // Get All Fundis
 app.get('/api/fundis', async (req, res) => {
@@ -97,4 +105,19 @@ mongoose.connect(process.env.MONGO_URI)
     });
   })
   .catch(err => console.log("❌ MongoDB error:", err));
+// M-Pesa STK Push Integration
+const { lipaNaMpesa } = require('./mpesa');
+const mpesaRoutes = require('./routes/mpesa');
+app.use('/api/mpesa', mpesaRoutes);
 
+
+app.post('/api/mpesa/pay', async (req, res) => {
+  const { phone, amount } = req.body;
+  try {
+    const result = await lipaNaMpesa(phone, amount);
+    res.json(result);
+  } catch (error) {
+    console.error('M-Pesa STK error:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Payment initiation failed' });
+  }
+});
