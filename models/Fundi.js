@@ -7,6 +7,7 @@ const fundiSchema = new mongoose.Schema({
   location: String,
   price: String,
   description: String,
+  profilePicture: String, // 👈 add this line
   createdAt: {
     type: Date,
     default: Date.now
