@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const Fundi = require('./models/Fundi');
 const User = require('./models/User');
+const Client = require('./models/Client'); // Import Client model
 const { lipaNaMpesa } = require('./routes/mpesa');
 const mpesaRoutes = require('./routes/mpesa');
 
@@ -82,6 +83,24 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   } catch (error) {
     console.error("❌ Fundi registration error:", error.message);
     res.status(500).json({ error: 'Fundi registration failed' });
+  }
+});
+
+// Register Client (with image)
+app.post('/api/clients', upload.single('photo'), async (req, res) => {
+  try {
+    const { name, phone, location, password } = req.body;
+    if (!name || !phone || !location || !password) {
+      return res.status(400).json({ error: "Please fill in all required fields." });
+    }
+    const photo = req.file ? `/uploads/${req.file.filename}` : null;
+    // You should hash the password before saving in production!
+    const client = new Client({ name, phone, location, password, photo });
+    await client.save();
+    res.status(201).json({ message: "Client registered successfully!" });
+  } catch (error) {
+    console.error("❌ Client registration error:", error.message);
+    res.status(500).json({ error: 'Client registration failed' });
   }
 });
 
