@@ -7,7 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const Fundi = require('./models/Fundi');
 const User = require('./models/User');
-const Client = require('./models/client'); // Import Client model
+const Client = require('./models/Client'); // Import Client model
 const { lipaNaMpesa } = require('./routes/mpesa');
 const mpesaRoutes = require('./routes/mpesa');
 
