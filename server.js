@@ -20,12 +20,13 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Password checker
+// Password strength checker
 function isStrongPassword(password) {
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
 }
@@ -46,7 +47,7 @@ const upload = multer({
   }
 });
 
-// ✅ LOGIN ROUTE (Fixed)
+// ✅ LOGIN ROUTE
 app.post('/api/login', async (req, res) => {
   const { identifier, password } = req.body;
   console.log("🔐 Login request received:", { identifier });
@@ -174,12 +175,24 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
   }
 });
 
-// ✅ Get all Fundis
+// ✅ Get all Fundis — UPDATED to return full photo URLs
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
-    res.json(fundis);
+
+    const enhancedFundis = fundis.map(fundi => {
+      const fundiObj = fundi.toObject();
+
+      if (fundiObj.photo && fundiObj.photo.startsWith('/uploads')) {
+        fundiObj.photo = `${req.protocol}://${req.get('host')}${fundiObj.photo}`;
+      }
+
+      return fundiObj;
+    });
+
+    res.json(enhancedFundis);
   } catch (err) {
+    console.error("❌ Error fetching fundis:", err.message);
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
