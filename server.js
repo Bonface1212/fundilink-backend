@@ -193,12 +193,14 @@ app.get('/api/fundis/:id', async (req, res) => {
 
 
 
-app.get('/api/clients', async (req, res) => {
+// ✅ Get a single client by ID
+app.get('/api/clients/:id', async (req, res) => {
   try {
-    const clients = await Client.find();
-    res.json(clients);
+    const client = await Client.findById(req.params.id);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    res.json(client);
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch clients' });
+    res.status(500).json({ error: 'Failed to fetch client' });
   }
 });
 
