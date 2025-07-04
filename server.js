@@ -5,21 +5,29 @@ const bcrypt = require("bcrypt");
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
 
 const Fundi = require('./models/Fundi');
 const User = require('./models/User');
-const Client = require('./models/Client'); // Correct Client model import
+const Client = require('./models/Client');
 const mpesaRoutes = require('./routes/mpesa');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Ensure 'uploads' folder exists (for Render deployments)
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir);
+  console.log("✅ Created 'uploads/' folder");
+}
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, "uploads")));
 
-// Multer setup for image uploads
+// Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
@@ -70,7 +78,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Register Fundi (with optional image)
+// Register Fundi (with optional photo)
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const { name, phone, skill, location, price, description } = req.body;
@@ -82,6 +90,7 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
     const fundi = new Fundi({ name, phone, skill, location, price, description, photo });
     await fundi.save();
+
     res.status(201).json({ message: "Fundi registered successfully!" });
   } catch (error) {
     console.error("❌ Fundi registration error:", error);
@@ -89,7 +98,7 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Register Client (with optional image)
+// Register Client (with optional photo)
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { name, phone, location, password } = req.body;
@@ -99,9 +108,8 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
     }
 
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-
-    // Note: Hashing client passwords is recommended before saving
-    const newClient = new Client({ name, phone, location, password, photo });
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newClient = new Client({ name, phone, location, password: hashedPassword, photo });
     await newClient.save();
 
     res.status(201).json({ message: "Client registered successfully!" });
@@ -111,7 +119,7 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
   }
 });
 
-// ✅ Get All Fundis
+// Get All Fundis
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
@@ -122,7 +130,7 @@ app.get('/api/fundis', async (req, res) => {
   }
 });
 
-// ✅ Get All Clients
+// Get All Clients
 app.get('/api/clients', async (req, res) => {
   try {
     const clients = await Client.find();
