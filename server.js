@@ -227,6 +227,17 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
   }
 });
 
+app.get('/api/clients', async (req, res) => {
+  try {
+    const clients = await Client.find();
+    res.json(clients);
+  } catch (err) {
+    console.error("❌ Error fetching clients:", err.message);
+    res.status(500).json({ error: "Failed to fetch clients" });
+  }
+});
+
+
 // ✅ Get all Fundis — UPDATED to return full photo URLs
 app.get('/api/fundis', async (req, res) => {
   try {
