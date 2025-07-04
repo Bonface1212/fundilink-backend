@@ -4,7 +4,9 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcrypt');
 const cors = require('cors');
 const multer = require('multer');
+const fs = require('fs');
 const path = require('path');
+
 
 const Fundi = require('./models/Fundi');
 const Client = require('./models/Client');
@@ -13,6 +15,11 @@ const mpesaRoutes = require('./routes/mpesa');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Ensure uploads directory exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
