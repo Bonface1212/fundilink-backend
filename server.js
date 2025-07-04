@@ -23,7 +23,6 @@ if (!fs.existsSync(uploadDir)) {
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Password checker
 function isStrongPassword(password) {
@@ -49,37 +48,38 @@ const upload = multer({
 // Login (shared for fundis/clients)
 // Enhanced Login Route with Debugging
 app.post('/api/login', async (req, res) => {
-  const { email, username, password } = req.body;
+  const { identifier, password } = req.body;
+const user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] });
 
-  console.log("🔐 Login request received:", { email, username });
+  console.log("🔐 Login request received:", { identifier });
 
   try {
-    let user = await Fundi.findOne({ $or: [{ email }, { username }] });
+    let user = await Fundi.findOne({
+      $or: [{ email: identifier }, { username: identifier }]
+    });
     if (!user) {
       console.log("🔎 Not a fundi. Checking clients...");
-      user = await Client.findOne({ $or: [{ email }, { username }] });
+      user = await Client.findOne({
+        $or: [{ email: identifier }, { username: identifier }]
+      });
     }
 
     if (!user) {
-      console.warn("❌ No user found with that identifier");
+      console.warn("❌ No user found");
       return res.status(404).json({ error: 'User not found' });
     }
 
-    console.log("👤 User found:", user.username);
-
     if (!user.password) {
-      console.error("❗ Password is undefined or missing for user:", user.username);
-      return res.status(500).json({ error: 'Password not found for user' });
+      console.error("❗ Password field missing for user");
+      return res.status(500).json({ error: 'Password missing' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      console.warn("❌ Incorrect password for:", user.username);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const role = user.skill ? 'fundi' : 'client';
-    console.log(`✅ ${role.toUpperCase()} logged in successfully.`);
 
     res.json({
       user: {
@@ -94,10 +94,11 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("💥 Login route crashed:", err);
-    res.status(500).json({ error: 'Login failed internally' });
+    console.error("💥 Login error:", err.message);
+    res.status(500).json({ error: 'Login failed' });
   }
 });
+
 
 
 // Fundi Registration
