@@ -15,28 +15,26 @@ const mpesaRoutes = require('./routes/mpesa');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Ensure 'uploads' folder exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir);
-  console.log("✅ Created 'uploads/' folder");
+// Ensure 'uploads' directory exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
 }
 
 // Middleware
 app.use(cors());
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, "uploads")));
+app.use('/uploads', express.static(uploadDir));
 
-// Multer setup
+// Multer config for image upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
     cb(null, Date.now() + "-" + file.originalname.replace(/\s+/g, ""))
 });
-
 const upload = multer({
   storage,
-  limits: { fileSize: 1 * 1024 * 1024 }, // Max 1MB
+  limits: { fileSize: 1 * 1024 * 1024 }, // 1MB max
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "image/jpg"];
     if (allowedTypes.includes(file.mimetype)) {
@@ -47,58 +45,9 @@ const upload = multer({
   }
 });
 
-// User Registration (Admin or generic user)
-app.post("/register", async (req, res) => {
-  const { username, email, password } = req.body;
-  try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = new User({ username, email, password: hashedPassword });
-    await user.save();
-    res.status(201).json({ message: "User registered successfully." });
-  } catch (err) {
-    console.error("❌ User registration error:", err);
-    res.status(500).json({ error: "Registration error" });
-  }
-});
+// ========= CLIENT ROUTES =========
 
-// User Login
-app.post("/login", async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
-
-    res.json({ user: { id: user._id, username: user.username, email: user.email } });
-  } catch (err) {
-    console.error("❌ Login error:", err);
-    res.status(500).json({ error: "Login error" });
-  }
-});
-
-// Register Fundi (with photo)
-app.post('/api/fundis', upload.single('photo'), async (req, res) => {
-  try {
-    const { name, phone, skill, location, price, description } = req.body;
-
-    if (!name || !phone || !skill || !location || !price) {
-      return res.status(400).json({ error: "Please fill in all required fields." });
-    }
-
-    const photo = req.file ? `/uploads/${req.file.filename}` : null;
-    const fundi = new Fundi({ name, phone, skill, location, price, description, photo });
-    await fundi.save();
-
-    res.status(201).json({ message: "Fundi registered successfully!" });
-  } catch (error) {
-    console.error("❌ Fundi registration error:", error);
-    res.status(500).json({ error: 'Fundi registration failed' });
-  }
-});
-
-// ✅ Register Client (with username & email)
+// Register Client
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, location, password } = req.body;
@@ -107,51 +56,32 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
       return res.status(400).json({ error: "Please fill in all required fields." });
     }
 
-    const existing = await Client.findOne({ $or: [{ username }, { email }] });
-    if (existing) {
-      return res.status(409).json({ error: "Username or email already in use." });
-    }
-
-    const photo = req.file ? `/uploads/${req.file.filename}` : null;
     const hashedPassword = await bcrypt.hash(password, 10);
+    const photo = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const newClient = new Client({
-      name,
-      username,
-      email,
-      phone,
-      location,
-      password: hashedPassword,
-      photo
-    });
-
-    await newClient.save();
+    const client = new Client({ name, username, email, phone, location, password: hashedPassword, photo });
+    await client.save();
     res.status(201).json({ message: "Client registered successfully!" });
   } catch (error) {
-    console.error("❌ Client registration error:", error);
-    res.status(500).json({ error: 'Client registration failed', details: error.message });
+    console.error("❌ Client registration error:", error.message);
+    res.status(500).json({ error: "Client registration failed" });
   }
 });
 
-// ✅ Client Login (with username OR email)
+// Client Login
 app.post('/api/clients/login', async (req, res) => {
   const { identifier, password } = req.body;
-
   try {
     const client = await Client.findOne({
       $or: [{ email: identifier }, { username: identifier }]
     });
 
-    if (!client) {
-      return res.status(404).json({ error: "Client not found" });
-    }
+    if (!client) return res.status(404).json({ error: "Client not found" });
 
     const isMatch = await bcrypt.compare(password, client.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
+    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
 
-    res.json({
+    res.status(200).json({
       client: {
         id: client._id,
         name: client.name,
@@ -162,12 +92,15 @@ app.post('/api/clients/login', async (req, res) => {
         photo: client.photo
       }
     });
-  } catch (error) {
-    console.error("❌ Client login error:", error);
-    res.status(500).json({ error: "Login failed", details: error.message });
+  } catch (err) {
+    console.error("❌ Client login error:", err.message);
+    res.status(500).json({ error: "Client login failed" });
   }
 });
-// Fundi Registration
+
+// ========= FUNDI ROUTES =========
+
+// Register Fundi
 app.post("/api/fundis", upload.single("photo"), async (req, res) => {
   try {
     const { name, username, email, phone, skill, location, price, description, password } = req.body;
@@ -200,7 +133,7 @@ app.post("/api/fundis", upload.single("photo"), async (req, res) => {
   }
 });
 
-// Fundi Login (by username or email)
+// Fundi Login
 app.post("/api/fundis/login", async (req, res) => {
   const { identifier, password } = req.body;
   try {
@@ -208,14 +141,10 @@ app.post("/api/fundis/login", async (req, res) => {
       $or: [{ email: identifier }, { username: identifier }]
     });
 
-    if (!fundi) {
-      return res.status(404).json({ error: "Fundi not found" });
-    }
+    if (!fundi) return res.status(404).json({ error: "Fundi not found" });
 
     const isMatch = await bcrypt.compare(password, fundi.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
+    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
 
     res.status(200).json({
       fundi: {
@@ -225,6 +154,8 @@ app.post("/api/fundis/login", async (req, res) => {
         email: fundi.email,
         phone: fundi.phone,
         skill: fundi.skill,
+        location: fundi.location,
+        price: fundi.price,
         photo: fundi.photo
       }
     });
@@ -234,38 +165,20 @@ app.post("/api/fundis/login", async (req, res) => {
   }
 });
 
-
-// Get All Fundis
+// ========= GET FUNDIS =========
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
     res.json(fundis);
   } catch (error) {
-    console.error("❌ Fetching fundis error:", error);
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
 
-// Get All Clients
-app.get('/api/clients', async (req, res) => {
-  try {
-    const clients = await Client.find();
-    res.json(clients);
-  } catch (error) {
-    console.error("❌ Fetching clients error:", error);
-    res.status(500).json({ error: 'Failed to fetch clients' });
-  }
-});
-
-// M-Pesa routes
+// ========= MPESA ROUTES =========
 app.use('/api/mpesa', mpesaRoutes);
 
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: "Server is running" });
-});
-
-// MongoDB Connection
+// ========= CONNECT TO DB & START SERVER =========
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
@@ -273,4 +186,4 @@ mongoose.connect(process.env.MONGO_URI)
       console.log(`✅ Server running on port ${PORT}`);
     });
   })
-  .catch(err => console.error("❌ MongoDB connection error:", err));
+  .catch(err => console.log("❌ MongoDB connection error:", err));
