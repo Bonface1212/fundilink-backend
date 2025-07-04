@@ -9,8 +9,10 @@ const path = require('path');
 
 // ✅ Models
 const Fundi = require('./models/Fundi');
-const Client = require('./models/Client'); // ensure this file is named exactly "Client.js" with proper export
+const Client = require('./models/Client');
+const Booking = require('./models/Booking');
 const mpesaRoutes = require('./routes/mpesa');
+const bookingRoutes = require('./routes/bookings'); // <-- bookings route file
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,7 +23,7 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-// ✅ CORS
+// ✅ CORS config
 const allowedOrigins = [
   'http://127.0.0.1:5500',
   'http://localhost:5500',
@@ -45,11 +47,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ Password Validator
-function isStrongPassword(password) {
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
-}
-
 // ✅ Multer (file upload) config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
@@ -66,6 +63,11 @@ const upload = multer({
   }
 });
 
+// ✅ Password strength checker
+function isStrongPassword(password) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
+}
+
 // ✅ Admin login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
@@ -78,7 +80,7 @@ app.post('/api/admin/login', (req, res) => {
   return res.status(401).json({ message: 'Invalid credentials' });
 });
 
-// ✅ Universal login for Fundi or Client
+// ✅ Universal login
 app.post('/api/login', async (req, res) => {
   const { identifier, password } = req.body;
 
@@ -124,11 +126,11 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
       return res.status(400).json({ error: 'Passwords do not match' });
 
     if (!isStrongPassword(password))
-      return res.status(400).json({ error: 'Password must be strong (min 8 chars, upper/lowercase, number & special character)' });
+      return res.status(400).json({ error: 'Weak password' });
 
     const exists = await Fundi.findOne({ $or: [{ email }, { username }] });
     if (exists)
-      return res.status(409).json({ error: exists.email === email ? 'Email already exists' : 'Username already taken' });
+      return res.status(409).json({ error: exists.email === email ? 'Email exists' : 'Username taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
@@ -155,11 +157,11 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
       return res.status(400).json({ error: 'Passwords do not match' });
 
     if (!isStrongPassword(password))
-      return res.status(400).json({ error: 'Password must be strong (min 8 chars, upper/lowercase, number & special character)' });
+      return res.status(400).json({ error: 'Weak password' });
 
     const exists = await Client.findOne({ $or: [{ email }, { username }] });
     if (exists)
-      return res.status(409).json({ error: exists.email === email ? 'Email already exists' : 'Username already taken' });
+      return res.status(409).json({ error: exists.email === email ? 'Email exists' : 'Username taken' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
@@ -222,10 +224,13 @@ app.delete('/api/fundis/:id', async (req, res) => {
   }
 });
 
+// ✅ Bookings route (all under /api/bookings)
+app.use('/api/bookings', bookingRoutes);
+
 // ✅ MPESA routes
 app.use('/api/mpesa', mpesaRoutes);
 
-// ✅ MongoDB connection
+// ✅ MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
