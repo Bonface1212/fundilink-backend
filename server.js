@@ -7,7 +7,6 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 
-
 const Fundi = require('./models/Fundi');
 const Client = require('./models/Client');
 const mpesaRoutes = require('./routes/mpesa');
@@ -20,9 +19,11 @@ const uploadDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
+
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Password checker
 function isStrongPassword(password) {
@@ -45,18 +46,16 @@ const upload = multer({
   }
 });
 
-// Login (shared for fundis/clients)
-// Enhanced Login Route with Debugging
+// ✅ LOGIN ROUTE (Fixed)
 app.post('/api/login', async (req, res) => {
   const { identifier, password } = req.body;
-const user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] });
-
   console.log("🔐 Login request received:", { identifier });
 
   try {
     let user = await Fundi.findOne({
       $or: [{ email: identifier }, { username: identifier }]
     });
+
     if (!user) {
       console.log("🔎 Not a fundi. Checking clients...");
       user = await Client.findOne({
@@ -69,8 +68,10 @@ const user = await Fundi.findOne({ $or: [{ email: identifier }, { username: iden
       return res.status(404).json({ error: 'User not found' });
     }
 
+    console.log("👤 User found:", user.username);
+
     if (!user.password) {
-      console.error("❗ Password field missing for user");
+      console.error("❗ Password field missing for user:", user.username);
       return res.status(500).json({ error: 'Password missing' });
     }
 
@@ -95,13 +96,11 @@ const user = await Fundi.findOne({ $or: [{ email: identifier }, { username: iden
     });
   } catch (err) {
     console.error("💥 Login error:", err.message);
-    res.status(500).json({ error: 'Login failed' });
+    res.status(500).json({ error: 'Login failed due to server error' });
   }
 });
 
-
-
-// Fundi Registration
+// ✅ Fundi Registration
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const {
@@ -140,7 +139,7 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Client Registration
+// ✅ Client Registration
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const {
@@ -175,7 +174,7 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Get all Fundis
+// ✅ Get all Fundis
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
@@ -185,8 +184,10 @@ app.get('/api/fundis', async (req, res) => {
   }
 });
 
+// ✅ MPesa routes
 app.use('/api/mpesa', mpesaRoutes);
 
+// ✅ MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
