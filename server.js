@@ -7,23 +7,18 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 
-// ✅ Models
+// Models
 const Fundi = require('./models/Fundi');
 const Client = require('./models/Client');
 const Booking = require('./models/Booking');
+const Payment = require('./models/Payment'); // ← Ensure this exists
 const mpesaRoutes = require('./routes/mpesa');
-const bookingRoutes = require('./routes/bookings'); // <-- bookings route file
+const bookingRoutes = require('./routes/bookings');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// ✅ Ensure uploads directory exists
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
-}
-
-// ✅ CORS config
+// CORS
 const allowedOrigins = [
   'http://127.0.0.1:5500',
   'http://localhost:5500',
@@ -42,17 +37,22 @@ app.use(cors({
   credentials: true,
 }));
 
-// ✅ Middleware
+// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ Multer (file upload) config
+// Ensure uploads folder exists
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir);
+}
+
+// Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
   filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, ''))
 });
-
 const upload = multer({
   storage,
   limits: { fileSize: 1 * 1024 * 1024 },
@@ -63,32 +63,26 @@ const upload = multer({
   }
 });
 
-// ✅ Password strength checker
+// Password strength validator
 function isStrongPassword(password) {
   return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
 }
 
-// ✅ Admin login
+// Admin login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
-  const ADMIN_USER = 'admin';
-  const ADMIN_PASS = 'admin123';
-
-  if (username === ADMIN_USER && password === ADMIN_PASS) {
+  if (username === 'admin' && password === 'admin123') {
     return res.json({ token: 'secure-admin-token' });
   }
   return res.status(401).json({ message: 'Invalid credentials' });
 });
 
-// ✅ Universal login
+// Login for Fundi or Client
 app.post('/api/login', async (req, res) => {
   const { identifier, password } = req.body;
-
   try {
-    let user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] });
-    if (!user) {
-      user = await Client.findOne({ $or: [{ email: identifier }, { username: identifier }] });
-    }
+    let user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] }) ||
+               await Client.findOne({ $or: [{ email: identifier }, { username: identifier }] });
 
     if (!user) return res.status(404).json({ error: 'User not found' });
 
@@ -109,16 +103,14 @@ app.post('/api/login', async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("💥 Login error:", err.message);
-    res.status(500).json({ error: 'Login failed due to server error' });
+    res.status(500).json({ error: 'Login failed' });
   }
 });
 
-// ✅ Fundi registration
+// Register fundi
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, skill, location, price, description, password, confirmPassword } = req.body;
-
     if (!name || !username || !email || !phone || !skill || !location || !price || !password || !confirmPassword)
       return res.status(400).json({ error: 'All fields are required' });
 
@@ -130,22 +122,20 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
 
     const exists = await Fundi.findOne({ $or: [{ email }, { username }] });
     if (exists)
-      return res.status(409).json({ error: exists.email === email ? 'Email exists' : 'Username taken' });
+      return res.status(409).json({ error: 'Email or username already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-
     const newFundi = new Fundi({ name, username, email, phone, skill, location, price, description, password: hashedPassword, photo });
-    await newFundi.save();
 
+    await newFundi.save();
     res.status(201).json({ message: 'Fundi registered successfully!' });
   } catch (err) {
-    console.error('Fundi reg error:', err.message);
     res.status(500).json({ error: 'Fundi registration failed' });
   }
 });
 
-// ✅ Client registration
+// Register client
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, location, password, confirmPassword } = req.body;
@@ -161,76 +151,113 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
 
     const exists = await Client.findOne({ $or: [{ email }, { username }] });
     if (exists)
-      return res.status(409).json({ error: exists.email === email ? 'Email exists' : 'Username taken' });
+      return res.status(409).json({ error: 'Email or username already exists' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-
     const newClient = new Client({ name, username, email, phone, location, password: hashedPassword, photo });
-    await newClient.save();
 
+    await newClient.save();
     res.status(201).json({ message: 'Client registered successfully!' });
   } catch (err) {
-    console.error('Client reg error:', err.message);
     res.status(500).json({ error: 'Client registration failed' });
   }
 });
 
-// ✅ Get all fundis
+// Fetch all fundis
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
-    const enhancedFundis = fundis.map(fundi => {
-      const obj = fundi.toObject();
-      if (obj.photo && obj.photo.startsWith('/uploads')) {
-        obj.photo = `${req.protocol}://${req.get('host')}${obj.photo}`;
-      }
-      return obj;
-    });
-    res.json(enhancedFundis);
+    res.json(fundis);
   } catch (err) {
-    console.error("❌ Error fetching fundis:", err.message);
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
 
-// ✅ Get all clients
+// Fetch all clients
 app.get('/api/clients', async (req, res) => {
   try {
     const clients = await Client.find();
-    const enhancedClients = clients.map(client => {
-      const obj = client.toObject();
-      if (obj.photo && obj.photo.startsWith('/uploads')) {
-        obj.photo = `${req.protocol}://${req.get('host')}${obj.photo}`;
-      }
-      return obj;
-    });
-    res.json(enhancedClients);
+    res.json(clients);
   } catch (err) {
-    console.error("❌ Error fetching clients:", err.message);
     res.status(500).json({ error: 'Failed to fetch clients' });
   }
 });
 
-// ✅ Delete Fundi
+// Admin delete & update fundis
 app.delete('/api/fundis/:id', async (req, res) => {
   try {
     const deleted = await Fundi.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ error: 'Fundi not found' });
     res.json({ message: 'Fundi deleted successfully' });
   } catch (err) {
-    console.error('❌ Error deleting fundi:', err.message);
-    res.status(500).json({ error: 'Failed to delete fundi' });
+    res.status(500).json({ error: 'Delete fundi failed' });
+  }
+});
+app.put('/api/fundis/:id', async (req, res) => {
+  try {
+    const updated = await Fundi.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Update fundi failed' });
   }
 });
 
-// ✅ Bookings route (all under /api/bookings)
+// Admin delete & update clients
+app.delete('/api/clients/:id', async (req, res) => {
+  try {
+    const deleted = await Client.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Client not found' });
+    res.json({ message: 'Client deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Delete client failed' });
+  }
+});
+app.put('/api/clients/:id', async (req, res) => {
+  try {
+    const updated = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Update client failed' });
+  }
+});
+
+// Admin delete & update bookings
+app.delete('/api/bookings/:id', async (req, res) => {
+  try {
+    const deleted = await Booking.findByIdAndDelete(req.params.id);
+    if (!deleted) return res.status(404).json({ error: 'Booking not found' });
+    res.json({ message: 'Booking deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: 'Delete booking failed' });
+  }
+});
+app.put('/api/bookings/:id', async (req, res) => {
+  try {
+    const updated = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: 'Update booking failed' });
+  }
+});
+
+// Get all bookings
 app.use('/api/bookings', bookingRoutes);
 
-// ✅ MPESA routes
+// Get all payments
+app.get('/api/payments', async (req, res) => {
+  try {
+    const payments = await Payment.find().sort({ createdAt: -1 });
+    res.json(payments);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch payments' });
+  }
+});
+
+// M-Pesa routes
 app.use('/api/mpesa', mpesaRoutes);
 
-// ✅ MongoDB Connection
+// DB connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
