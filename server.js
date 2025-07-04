@@ -46,15 +46,39 @@ const upload = multer({
 });
 
 // Login (shared for fundis/clients)
+// Enhanced Login Route with Debugging
 app.post('/api/login', async (req, res) => {
   const { email, username, password } = req.body;
+
+  console.log("🔐 Login request received:", { email, username });
+
   try {
     let user = await Fundi.findOne({ $or: [{ email }, { username }] });
-    if (!user) user = await Client.findOne({ $or: [{ email }, { username }] });
-    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (!user) {
+      console.log("🔎 Not a fundi. Checking clients...");
+      user = await Client.findOne({ $or: [{ email }, { username }] });
+    }
+
+    if (!user) {
+      console.warn("❌ No user found with that identifier");
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log("👤 User found:", user.username);
+
+    if (!user.password) {
+      console.error("❗ Password is undefined or missing for user:", user.username);
+      return res.status(500).json({ error: 'Password not found for user' });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!isMatch) {
+      console.warn("❌ Incorrect password for:", user.username);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const role = user.skill ? 'fundi' : 'client';
+    console.log(`✅ ${role.toUpperCase()} logged in successfully.`);
 
     res.json({
       user: {
@@ -65,14 +89,15 @@ app.post('/api/login', async (req, res) => {
         phone: user.phone,
         location: user.location,
         photo: user.photo,
-        role: user.skill ? 'fundi' : 'client'
+        role
       }
     });
   } catch (err) {
-    console.error('Login error:', err.message);
-    res.status(500).json({ error: 'Login failed' });
+    console.error("💥 Login route crashed:", err);
+    res.status(500).json({ error: 'Login failed internally' });
   }
 });
+
 
 // Fundi Registration
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
