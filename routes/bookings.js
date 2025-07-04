@@ -31,6 +31,27 @@ router.post('/', async (req, res) => {
     res.status(500).json({ error: 'Failed to create booking' });
   }
 });
+// 📁 backend/routes/bookings.js
+router.put('/bookings/:id/claim', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { fundiId, paidByFundi, claimed } = req.body;
+
+    const updated = await Booking.findByIdAndUpdate(id, {
+      fundiId,
+      paidByFundi,
+      claimed
+    }, { new: true });
+
+    if (!updated) return res.status(404).json({ error: "Booking not found" });
+
+    res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 
 module.exports = router;
