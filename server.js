@@ -15,7 +15,7 @@ const mpesaRoutes = require('./routes/mpesa');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Ensure 'uploads' folder exists (for Render deployments)
+// Ensure 'uploads' folder exists
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir);
@@ -27,7 +27,7 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, "uploads")));
 
-// Multer setup for file uploads
+// Multer setup
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
   filename: (req, file, cb) =>
@@ -47,7 +47,7 @@ const upload = multer({
   }
 });
 
-// Register User
+// User Registration (Admin or generic user)
 app.post("/register", async (req, res) => {
   const { username, email, password } = req.body;
   try {
@@ -78,7 +78,7 @@ app.post("/login", async (req, res) => {
   }
 });
 
-// Register Fundi (with optional photo)
+// Register Fundi (with photo)
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const { name, phone, skill, location, price, description } = req.body;
@@ -98,26 +98,142 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Register Client (with optional photo)
+// ✅ Register Client (with username & email)
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
-    const { name, phone, location, password } = req.body;
+    const { name, username, email, phone, location, password } = req.body;
 
-    if (!name || !phone || !location || !password) {
+    if (!name || !username || !email || !phone || !location || !password) {
       return res.status(400).json({ error: "Please fill in all required fields." });
+    }
+
+    const existing = await Client.findOne({ $or: [{ username }, { email }] });
+    if (existing) {
+      return res.status(409).json({ error: "Username or email already in use." });
     }
 
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
     const hashedPassword = await bcrypt.hash(password, 10);
-    const newClient = new Client({ name, phone, location, password: hashedPassword, photo });
-    await newClient.save();
 
+    const newClient = new Client({
+      name,
+      username,
+      email,
+      phone,
+      location,
+      password: hashedPassword,
+      photo
+    });
+
+    await newClient.save();
     res.status(201).json({ message: "Client registered successfully!" });
   } catch (error) {
     console.error("❌ Client registration error:", error);
     res.status(500).json({ error: 'Client registration failed', details: error.message });
   }
 });
+
+// ✅ Client Login (with username OR email)
+app.post('/api/clients/login', async (req, res) => {
+  const { identifier, password } = req.body;
+
+  try {
+    const client = await Client.findOne({
+      $or: [{ email: identifier }, { username: identifier }]
+    });
+
+    if (!client) {
+      return res.status(404).json({ error: "Client not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, client.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    res.json({
+      client: {
+        id: client._id,
+        name: client.name,
+        username: client.username,
+        email: client.email,
+        phone: client.phone,
+        location: client.location,
+        photo: client.photo
+      }
+    });
+  } catch (error) {
+    console.error("❌ Client login error:", error);
+    res.status(500).json({ error: "Login failed", details: error.message });
+  }
+});
+// Fundi Registration
+app.post("/api/fundis", upload.single("photo"), async (req, res) => {
+  try {
+    const { name, username, email, phone, skill, location, price, description, password } = req.body;
+
+    if (!name || !username || !email || !phone || !skill || !location || !price || !password) {
+      return res.status(400).json({ error: "Please fill in all required fields." });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const photo = req.file ? `/uploads/${req.file.filename}` : null;
+
+    const fundi = new Fundi({
+      name,
+      username,
+      email,
+      phone,
+      skill,
+      location,
+      price,
+      description,
+      photo,
+      password: hashedPassword
+    });
+
+    await fundi.save();
+    res.status(201).json({ message: "Fundi registered successfully!" });
+  } catch (error) {
+    console.error("❌ Fundi registration error:", error.message);
+    res.status(500).json({ error: "Fundi registration failed" });
+  }
+});
+
+// Fundi Login (by username or email)
+app.post("/api/fundis/login", async (req, res) => {
+  const { identifier, password } = req.body;
+  try {
+    const fundi = await Fundi.findOne({
+      $or: [{ email: identifier }, { username: identifier }]
+    });
+
+    if (!fundi) {
+      return res.status(404).json({ error: "Fundi not found" });
+    }
+
+    const isMatch = await bcrypt.compare(password, fundi.password);
+    if (!isMatch) {
+      return res.status(401).json({ error: "Invalid credentials" });
+    }
+
+    res.status(200).json({
+      fundi: {
+        id: fundi._id,
+        name: fundi.name,
+        username: fundi.username,
+        email: fundi.email,
+        phone: fundi.phone,
+        skill: fundi.skill,
+        photo: fundi.photo
+      }
+    });
+  } catch (err) {
+    console.error("❌ Fundi login error:", err.message);
+    res.status(500).json({ error: "Fundi login failed" });
+  }
+});
+
 
 // Get All Fundis
 app.get('/api/fundis', async (req, res) => {
@@ -149,7 +265,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: "Server is running" });
 });
 
-// Connect to MongoDB and start server
+// MongoDB Connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log("✅ MongoDB connected");
