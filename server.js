@@ -7,7 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const Fundi = require('./models/Fundi');
 const User = require('./models/User');
-const Client = require('./models/Client'); // Import Client model
+const Client = require('./models/client'); // Import Client model
 const { lipaNaMpesa } = require('./routes/mpesa');
 const mpesaRoutes = require('./routes/mpesa');
 
@@ -95,8 +95,8 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
     }
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
     // You should hash the password before saving in production!
-    const client = new Client({ name, phone, location, password, photo });
-    await client.save();
+    const Client = new Client({ name, phone, location, password, photo });
+    await Client.save();
     res.status(201).json({ message: "Client registered successfully!" });
   } catch (error) {
     console.error("❌ Client registration error:", error.message);
