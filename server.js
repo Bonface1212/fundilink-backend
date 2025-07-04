@@ -180,6 +180,25 @@ app.get('/api/fundis', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch fundis' });
   }
 });
+// ✅ Get all clients
+app.get('/api/clients', async (req, res) => {
+  try {
+    const clients = await Client.find();
+    res.json(clients);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch clients' });
+  }
+});
+// ✅ Get a single client by ID
+app.get('/api/clients/:id', async (req, res) => {
+  try {
+    const client = await Client.findById(req.params.id);
+    if (!client) return res.status(404).json({ error: 'Client not found' });
+    res.json(client);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch client' });
+  }
+});
 // ✅ Get a single fundi by ID
 app.get('/api/fundis/:id', async (req, res) => {
   try {
@@ -193,16 +212,7 @@ app.get('/api/fundis/:id', async (req, res) => {
 
 
 
-// ✅ Get a single client by ID
-app.get('/api/clients/:id', async (req, res) => {
-  try {
-    const client = await Client.findById(req.params.id);
-    if (!client) return res.status(404).json({ error: 'Client not found' });
-    res.json(client);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch client' });
-  }
-});
+
 
 // 🔄 CRUD (Admin)
 app.delete('/api/fundis/:id', async (req, res) => {
