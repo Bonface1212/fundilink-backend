@@ -154,6 +154,44 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
+// ✅ Delete a Fundi by ID
+app.delete('/api/fundis/:id', async (req, res) => {
+  try {
+    const fundiId = req.params.id;
+    const fundi = await Fundi.findByIdAndDelete(fundiId);
+
+    if (!fundi) {
+      return res.status(404).json({ error: 'Fundi not found' });
+    }
+
+    res.json({ message: 'Fundi deleted successfully' });
+  } catch (err) {
+    console.error('❌ Error deleting fundi:', err.message);
+    res.status(500).json({ error: 'Failed to delete fundi' });
+  }
+});
+
+// ✅ Get all Clients
+app.get('/api/clients', async (req, res) => {
+  try {
+    const clients = await Client.find();
+
+    const enhancedClients = clients.map(client => {
+      const clientObj = client.toObject();
+      if (clientObj.photo && clientObj.photo.startsWith('/uploads')) {
+        clientObj.photo = `${req.protocol}://${req.get('host')}${clientObj.photo}`;
+      }
+      return clientObj;
+    });
+
+    res.json(enhancedClients);
+  } catch (err) {
+    console.error("❌ Error fetching clients:", err.message);
+    res.status(500).json({ error: 'Failed to fetch clients' });
+  }
+});
+
+
 // ✅ Client Registration
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
