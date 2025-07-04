@@ -11,17 +11,18 @@ const path = require('path');
 const Fundi = require('./models/Fundi');
 const Client = require('./models/Client');
 const Booking = require('./models/Booking');
-const Payment = require('./models/Payment'); // ← Ensure this exists
+const Payment = require('./models/Payment'); // Make sure this file exists
 const mpesaRoutes = require('./routes/mpesa');
 const bookingRoutes = require('./routes/bookings');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 
-// CORS
+// ✅ CORS setup
 const allowedOrigins = [
   'http://127.0.0.1:5500',
   'http://localhost:5500',
+  'http://localhost:3000',
   'https://fundilink-frontend.onrender.com'
 ];
 
@@ -37,57 +38,54 @@ app.use(cors({
   credentials: true,
 }));
 
-// Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Ensure uploads folder exists
-const uploadDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
+// ✅ Serve uploaded images
+const uploadsPath = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsPath)) {
+  fs.mkdirSync(uploadsPath);
 }
+app.use('/uploads', express.static(uploadsPath));
 
-// Multer config
+// ✅ Multer config
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, ''))
+  filename: (req, file, cb) =>
+    cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, ''))
 });
 const upload = multer({
   storage,
   limits: { fileSize: 1 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
-    if (allowed.includes(file.mimetype)) cb(null, true);
-    else cb(new Error('Only JPEG and PNG images allowed'), false);
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg'];
+    cb(null, allowedTypes.includes(file.mimetype));
   }
 });
 
-// Password strength validator
-function isStrongPassword(password) {
-  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
-}
+// ✅ Password strength checker
+const isStrongPassword = (pwd) =>
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pwd);
 
-// Admin login
+// 🔐 Admin Login
 app.post('/api/admin/login', (req, res) => {
   const { username, password } = req.body;
   if (username === 'admin' && password === 'admin123') {
     return res.json({ token: 'secure-admin-token' });
   }
-  return res.status(401).json({ message: 'Invalid credentials' });
+  res.status(401).json({ message: 'Invalid credentials' });
 });
 
-// Login for Fundi or Client
+// 🔐 Login
 app.post('/api/login', async (req, res) => {
   const { identifier, password } = req.body;
   try {
-    let user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] }) ||
-               await Client.findOne({ $or: [{ email: identifier }, { username: identifier }] });
-
+    const user = await Fundi.findOne({ $or: [{ email: identifier }, { username: identifier }] }) ||
+                 await Client.findOne({ $or: [{ email: identifier }, { username: identifier }] });
     if (!user) return res.status(404).json({ error: 'User not found' });
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
 
     const role = user.skill ? 'fundi' : 'client';
     res.json({
@@ -107,10 +105,11 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Register fundi
+// 👷 Fundi Registration
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, skill, location, price, description, password, confirmPassword } = req.body;
+
     if (!name || !username || !email || !phone || !skill || !location || !price || !password || !confirmPassword)
       return res.status(400).json({ error: 'All fields are required' });
 
@@ -126,7 +125,11 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-    const newFundi = new Fundi({ name, username, email, phone, skill, location, price, description, password: hashedPassword, photo });
+
+    const newFundi = new Fundi({
+      name, username, email, phone, skill, location, price,
+      description, password: hashedPassword, photo
+    });
 
     await newFundi.save();
     res.status(201).json({ message: 'Fundi registered successfully!' });
@@ -135,7 +138,7 @@ app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Register client
+// 👤 Client Registration
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, location, password, confirmPassword } = req.body;
@@ -155,7 +158,11 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-    const newClient = new Client({ name, username, email, phone, location, password: hashedPassword, photo });
+
+    const newClient = new Client({
+      name, username, email, phone, location,
+      password: hashedPassword, photo
+    });
 
     await newClient.save();
     res.status(201).json({ message: 'Client registered successfully!' });
@@ -164,7 +171,7 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
   }
 });
 
-// Fetch all fundis
+// 📄 Fetch Data
 app.get('/api/fundis', async (req, res) => {
   try {
     const fundis = await Fundi.find();
@@ -174,7 +181,6 @@ app.get('/api/fundis', async (req, res) => {
   }
 });
 
-// Fetch all clients
 app.get('/api/clients', async (req, res) => {
   try {
     const clients = await Client.find();
@@ -184,7 +190,7 @@ app.get('/api/clients', async (req, res) => {
   }
 });
 
-// Admin delete & update fundis
+// 🔄 CRUD (Admin)
 app.delete('/api/fundis/:id', async (req, res) => {
   try {
     const deleted = await Fundi.findByIdAndDelete(req.params.id);
@@ -194,6 +200,7 @@ app.delete('/api/fundis/:id', async (req, res) => {
     res.status(500).json({ error: 'Delete fundi failed' });
   }
 });
+
 app.put('/api/fundis/:id', async (req, res) => {
   try {
     const updated = await Fundi.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -203,7 +210,7 @@ app.put('/api/fundis/:id', async (req, res) => {
   }
 });
 
-// Admin delete & update clients
+// Same for clients...
 app.delete('/api/clients/:id', async (req, res) => {
   try {
     const deleted = await Client.findByIdAndDelete(req.params.id);
@@ -213,6 +220,7 @@ app.delete('/api/clients/:id', async (req, res) => {
     res.status(500).json({ error: 'Delete client failed' });
   }
 });
+
 app.put('/api/clients/:id', async (req, res) => {
   try {
     const updated = await Client.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -222,29 +230,10 @@ app.put('/api/clients/:id', async (req, res) => {
   }
 });
 
-// Admin delete & update bookings
-app.delete('/api/bookings/:id', async (req, res) => {
-  try {
-    const deleted = await Booking.findByIdAndDelete(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Booking not found' });
-    res.json({ message: 'Booking deleted successfully' });
-  } catch (err) {
-    res.status(500).json({ error: 'Delete booking failed' });
-  }
-});
-app.put('/api/bookings/:id', async (req, res) => {
-  try {
-    const updated = await Booking.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: 'Update booking failed' });
-  }
-});
-
-// Get all bookings
+// 📆 Bookings
 app.use('/api/bookings', bookingRoutes);
 
-// Get all payments
+// 💳 Payments
 app.get('/api/payments', async (req, res) => {
   try {
     const payments = await Payment.find().sort({ createdAt: -1 });
@@ -254,13 +243,13 @@ app.get('/api/payments', async (req, res) => {
   }
 });
 
-// M-Pesa routes
+// 🔁 M-Pesa Routes
 app.use('/api/mpesa', mpesaRoutes);
 
-// DB connection
+// 🧠 MongoDB connection
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
     app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
   })
-  .catch(err => console.error('❌ MongoDB error:', err));
+  .catch(err => console.error('❌ MongoDB connection error:', err));
