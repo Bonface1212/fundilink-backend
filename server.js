@@ -1,3 +1,4 @@
+// ===== server.js (with password validation and confirmation) =====
 require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
@@ -8,7 +9,6 @@ const path = require('path');
 
 const Fundi = require('./models/Fundi');
 const Client = require('./models/Client');
-const User = require('./models/User');
 const mpesaRoutes = require('./routes/mpesa');
 
 const app = express();
@@ -19,16 +19,20 @@ app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Multer for image upload
+// Password strength checker
+function isStrongPassword(password) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(password);
+}
+
+// Multer config for image upload
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, 'uploads/'),
-  filename: (req, file, cb) =>
-    cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, ''))
+  filename: (req, file, cb) => cb(null, Date.now() + '-' + file.originalname.replace(/\s+/g, ''))
 });
 
 const upload = multer({
   storage,
-  limits: { fileSize: 1 * 1024 * 1024 }, // Max 1MB
+  limits: { fileSize: 1 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = ['image/jpeg', 'image/png', 'image/jpg'];
     if (allowed.includes(file.mimetype)) cb(null, true);
@@ -36,25 +40,13 @@ const upload = multer({
   }
 });
 
-// ===== USER LOGIN (both fundi and client) =====
+// ===== User Login (Client or Fundi) =====
 app.post('/api/login', async (req, res) => {
   const { email, username, password } = req.body;
-
   try {
-    // Try both fundi and client collections
-    let user = await Fundi.findOne({
-      $or: [{ email }, { username }]
-    });
-
-    if (!user) {
-      user = await Client.findOne({
-        $or: [{ email }, { username }]
-      });
-    }
-
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
+    let user = await Fundi.findOne({ $or: [{ email }, { username }] });
+    if (!user) user = await Client.findOne({ $or: [{ email }, { username }] });
+    if (!user) return res.status(404).json({ error: 'User not found' });
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
@@ -77,92 +69,71 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// ===== FUNDIS =====
-
-// Register Fundi
+// ===== Fundi Registration =====
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, skill, location, price, description, password } = req.body;
 
-    if (!name || !username || !email || !phone || !skill || !location || !price || !password) {
-      return res.status(400).json({ error: 'Please fill in all required fields.' });
-    }
+    if (!name || !username || !email || !phone || !skill || !location || !price || !password)
+      return res.status(400).json({ error: 'All fields required' });
+
+    if (!isStrongPassword(password))
+      return res.status(400).json({ error: 'Password must include lowercase, uppercase, number, special character, and be 8+ characters long.' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const newFundi = new Fundi({
-      name,
-      username,
-      email,
-      phone,
-      skill,
-      location,
-      price,
-      description,
-      password: hashedPassword,
-      photo
-    });
-
+    const newFundi = new Fundi({ name, username, email, phone, skill, location, price, description, password: hashedPassword, photo });
     await newFundi.save();
+
     res.status(201).json({ message: 'Fundi registered successfully!' });
-  } catch (error) {
-    console.error('❌ Fundi registration error:', error.message);
+  } catch (err) {
+    console.error('❌ Fundi registration error:', err.message);
     res.status(500).json({ error: 'Fundi registration failed' });
   }
 });
 
-// Get all Fundis
-app.get('/api/fundis', async (req, res) => {
-  try {
-    const fundis = await Fundi.find();
-    res.json(fundis);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch fundis' });
-  }
-});
-
-// ===== CLIENTS =====
-
-// Register Client
+// ===== Client Registration =====
 app.post('/api/clients', upload.single('photo'), async (req, res) => {
   try {
     const { name, username, email, phone, location, password } = req.body;
 
-    if (!name || !username || !email || !phone || !location || !password) {
-      return res.status(400).json({ error: 'Please fill in all required fields.' });
-    }
+    if (!name || !username || !email || !phone || !location || !password)
+      return res.status(400).json({ error: 'All fields required' });
+
+    if (!isStrongPassword(password))
+      return res.status(400).json({ error: 'Password must include lowercase, uppercase, number, special character, and be 8+ characters long.' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
 
-    const newClient = new Client({
-      name,
-      username,
-      email,
-      phone,
-      location,
-      password: hashedPassword,
-      photo
-    });
-
+    const newClient = new Client({ name, username, email, phone, location, password: hashedPassword, photo });
     await newClient.save();
+
     res.status(201).json({ message: 'Client registered successfully!' });
-  } catch (error) {
-    console.error('❌ Client registration error:', error.message);
+  } catch (err) {
+    console.error('❌ Client registration error:', err.message);
     res.status(500).json({ error: 'Client registration failed' });
   }
 });
 
-// ===== M-PESA Integration =====
+// ===== Get All Fundis =====
+app.get('/api/fundis', async (req, res) => {
+  try {
+    const fundis = await Fundi.find();
+    res.json(fundis);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch fundis' });
+  }
+});
+
+// ===== M-Pesa Routes =====
 app.use('/api/mpesa', mpesaRoutes);
 
-// ===== MongoDB & Server Init =====
+// ===== Start Server =====
 mongoose.connect(process.env.MONGO_URI)
   .then(() => {
     console.log('✅ MongoDB connected');
-    app.listen(PORT, () => {
-      console.log(`✅ Server running on port ${PORT}`);
-    });
+    app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
   })
-  .catch(err => console.log('❌ MongoDB error:', err));
+  .catch(err => console.error('❌ MongoDB connection error:', err));
