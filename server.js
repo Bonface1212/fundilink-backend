@@ -94,15 +94,25 @@ app.post('/api/clients', upload.single('photo'), async (req, res) => {
       return res.status(400).json({ error: "Please fill in all required fields." });
     }
     const photo = req.file ? `/uploads/${req.file.filename}` : null;
-    // You should hash the password before saving in production!
-    const Client = new Client({ name, phone, location, password, photo });
-    await Client.save();
+    
+    const newClient = new Client({ name, phone, location, password, photo }); // ✅ no overwrite
+    await newClient.save();
     res.status(201).json({ message: "Client registered successfully!" });
   } catch (error) {
     console.error("❌ Client registration error:", error.message);
     res.status(500).json({ error: 'Client registration failed' });
   }
 });
+// ✅ Get All Clients
+app.get('/api/clients', async (req, res) => {
+  try {
+    const clients = await Client.find();
+    res.json(clients);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch clients' });
+  }
+});
+
 
 // Get All Fundis
 app.get('/api/fundis', async (req, res) => {
