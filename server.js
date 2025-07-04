@@ -101,6 +101,20 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+app.post('/api/admin/login', (req, res) => {
+  const { username, password } = req.body;
+
+  const ADMIN_USER = 'admin';
+  const ADMIN_PASS = 'admin123';
+
+  if (username === ADMIN_USER && password === ADMIN_PASS) {
+    return res.json({ token: 'secure-admin-token' });
+  }
+
+  return res.status(401).json({ message: 'Invalid credentials' });
+});
+
+
 // ✅ Fundi Registration
 app.post('/api/fundis', upload.single('photo'), async (req, res) => {
   try {
