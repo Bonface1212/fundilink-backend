@@ -184,14 +184,13 @@ app.get('/api/fundis', async (req, res) => {
 app.get('/api/fundis/:id', async (req, res) => {
   try {
     const fundi = await Fundi.findById(req.params.id);
-    if (!fundi) {
-      return res.status(404).json({ error: 'Fundi not found' });
-    }
+    if (!fundi) return res.status(404).json({ error: 'Fundi not found' });
     res.json(fundi);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch fundi' });
   }
 });
+
 
 
 app.get('/api/clients', async (req, res) => {
