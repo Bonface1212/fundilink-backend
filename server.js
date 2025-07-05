@@ -23,8 +23,10 @@ const allowedOrigins = [
   'http://127.0.0.1:5500',
   'http://localhost:5500',
   'http://localhost:3000',
-  'https://fundilink-frontend.onrender.com'
+  'https://fundilink-frontend.onrender.com',
+  'https://fundilinkapp.netlify.app' // ✅ add this line
 ];
+
 
 app.use(cors({
   origin: function (origin, callback) {
